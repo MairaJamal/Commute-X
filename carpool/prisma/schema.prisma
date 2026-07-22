@@ -1,0 +1,219 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                  String                 @id @default(uuid())
+  name                String
+  email               String                 @unique
+  passwordHash        String?                // bcrypt hash; nullable only for pre-auth legacy rows
+  phone               String?
+  role                String                 // "student" or "office_worker"
+  gender              String                 // "female" or "male"
+  verificationStatus  String                 @default("pending") // "pending", "verified"
+  avatarText          String
+  rating              Float                  @default(5.0)
+  ridesCompleted      Int                    @default(0)
+  memberSince         String
+  userPreferences     UserPreferences?
+  emergencyContacts   EmergencyContact[]
+  verificationDocuments VerificationDocument[]
+  commuteRequests     CommuteRequest[]
+  sentMessages        Message[]              @relation("SentMessages")
+  receivedMessages    Message[]              @relation("ReceivedMessages")
+  drivenRides         Ride[]                 @relation("RideDriver")
+  rideParticipations  RideParticipant[]
+  sosEvents           SosEvent[]
+  rideLocations       RideLocation[]
+  sessions            Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserPreferences {
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  usualRoute     String
+  chatStyle      String
+  musicStyle     String
+  womenOnlyMode  Boolean @default(false)
+  willingToDrive Boolean @default(false)
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmergencyContact {
+  id     String @id @default(uuid())
+  userId String
+  name   String
+  phone  String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationDocument {
+  id           String @id @default(uuid())
+  userId       String
+  documentType String
+  fileUrl      String
+  status       String @default("pending") // "pending", "verified"
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CommuteRequest {
+  id                String   @id @default(uuid())
+  userId            String
+  pickupAddress     String
+  pickupLat         Float
+  pickupLng         Float
+  destAddress       String
+  destLat           Float
+  destLng           Float
+  departureTime     String
+  flexibilityWindow String
+  frequency         String   // "daily" or "one_time"
+  daysOfWeek        String   // comma-separated values, e.g. "M,T,W,T,F"
+  womenOnly         Boolean  @default(false)
+  willingToDrive    Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages          Message[]
+  rides             Ride[]
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  requestId  String
+  content    String
+  createdAt  DateTime @default(now())
+
+  sender   User           @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User           @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  request  CommuteRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([senderId, receiverId])
+  @@index([requestId, createdAt])
+}
+
+/// Lifecycle: requested → matched → confirmed → in_progress → completed
+/// (or cancelled from any pre-completed state)
+model Ride {
+  id             String   @id @default(uuid())
+  status         String   @default("requested")
+  requestId      String
+  driverId       String
+
+  // Ticket snapshot (survives request edits)
+  pickupAddress  String
+  destAddress    String
+  departureTime  String
+  womenOnly      Boolean  @default(false)
+  vehicleInfo    String?
+
+  // Fare agreement — required before status can become "confirmed"
+  distanceKm         Float?
+  tolls              Float    @default(20)
+  serviceFeePerRider Float    @default(6)
+  totalFare          Float?
+  sharePerRider      Float?
+  riderCount         Int      @default(2)
+  fareAgreedAt       DateTime?
+  fareAgreedById     String?
+
+  driverAcceptedAt    DateTime?
+  passengerAcceptedAt DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  confirmedAt DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  request      CommuteRequest    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  driver       User              @relation("RideDriver", fields: [driverId], references: [id])
+  participants RideParticipant[]
+  locations    RideLocation[]
+  sosEvents    SosEvent[]
+
+  @@index([requestId, status])
+  @@index([driverId])
+}
+
+model RideParticipant {
+  id        String   @id @default(uuid())
+  rideId    String
+  userId    String
+  role      String   // "driver" | "rider"
+  fareShare Float?
+  createdAt DateTime @default(now())
+
+  ride Ride @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([rideId, userId])
+}
+
+model SosEvent {
+  id               String    @id @default(uuid())
+  userId           String
+  rideId           String?
+  lat              Float
+  lng              Float
+  status           String    @default("triggered") // triggered | cancelled | resolved
+  notifiedContacts String    // JSON snapshot of contacts notified at trigger time
+  notifyResults    String?   // JSON snapshot of call/WhatsApp send results, for audit/debug
+  createdAt        DateTime  @default(now())
+  cancelledAt      DateTime?
+  resolvedAt       DateTime?
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ride      Ride?         @relation(fields: [rideId], references: [id], onDelete: SetNull)
+  locations SosLocation[]
+
+  @@index([userId, createdAt])
+}
+
+/// Live location trail for an active SOS event. The event id itself acts as an
+/// unguessable capability token for the public tracking link shared with contacts.
+model SosLocation {
+  id         String   @id @default(uuid())
+  sosEventId String
+  lat        Float
+  lng        Float
+  createdAt  DateTime @default(now())
+
+  sosEvent SosEvent @relation(fields: [sosEventId], references: [id], onDelete: Cascade)
+
+  @@index([sosEventId, createdAt])
+}
+
+model RideLocation {
+  id        String   @id @default(uuid())
+  rideId    String
+  userId    String
+  lat       Float
+  lng       Float
+  createdAt DateTime @default(now())
+
+  ride Ride @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rideId, createdAt])
+  @@index([rideId, userId, createdAt])
+}
