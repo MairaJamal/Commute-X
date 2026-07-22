@@ -135,7 +135,4 @@ Commute‑X complements existing ride‑hailing services by helping passengers s
 This saves money, reduces congestion, and contributes to a greener environment.
 ```
 
----
 
-This version looks elegant in GitHub’s dark mode and highlights your **live deployment** clearly.  
-Would you like me to add **badges** (for build status, license, and Vercel deploy) at the top next? They make your README look even more professional.
