@@ -8,6 +8,8 @@ interface Match {
   id: string;
   score: number;
   distance: number;
+  destDistance: number;
+  sameDestination: boolean;
   price: number;
   user: {
     id: string;
@@ -26,6 +28,10 @@ interface Match {
   request: {
     pickupAddress: string;
     destAddress: string;
+    pickupLat: number;
+    pickupLng: number;
+    destLat: number;
+    destLng: number;
     departureTime: string;
     flexibilityWindow: string;
     frequency: string;
@@ -67,7 +73,6 @@ function MatchesContent() {
   };
 
   const handleViewProfile = (match: Match) => {
-    // Navigate to match detail and pass relevant params to display detailed views dynamically
     const params = new URLSearchParams({
       name: match.user.name,
       initials: match.user.avatarText,
@@ -80,8 +85,11 @@ function MatchesContent() {
       music: match.user.musicStyle,
       drive: match.user.willingToDrive ? 'Yes' : 'No',
       peerId: match.user.id,
-      // Match id is the peer's commute request; fall back to the viewer's request if present
       requestId: requestId || match.id,
+      pickupLat: match.request.pickupLat.toString(),
+      pickupLng: match.request.pickupLng.toString(),
+      destLat: match.request.destLat.toString(),
+      destLng: match.request.destLng.toString(),
     });
     router.push(`/match-detail?${params.toString()}`);
   };
@@ -144,7 +152,11 @@ function MatchesContent() {
                   <span className="badge badge-women">♀ Women-only</span>
                 </div>
                 <div className="match-route">
-                  📍 {match.distance} km from your pickup · same destination block · leaves {match.request.departureTime}
+                  📍 {match.distance} km from your pickup
+                  {match.sameDestination
+                    ? ' · same destination block'
+                    : ` · ${match.destDistance} km from your destination`}
+                  {' '}· leaves {match.request.departureTime}
                 </div>
                 <div className="match-tags">
                   <span className="badge badge-amber">{match.user.role === 'student' ? 'Same college' : 'Same office park'}</span>

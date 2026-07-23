@@ -100,6 +100,16 @@ export async function GET(request: Request) {
           req.pickupLng
         );
 
+        // Real destination proximity check — replaces the old hardcoded
+        // "same destination block" text that was shown regardless of fit.
+        const destDistance = haversineDistance(
+          activeRequest.destLat,
+          activeRequest.destLng,
+          req.destLat,
+          req.destLng
+        );
+        const sameDestination = destDistance < 1; // within 1km counts as "same block"
+
         // Estimated per-rider price for the matches list
         const estimatedTripKm = Math.max(distance * 2.4, 3);
         const price = Math.round(
@@ -111,6 +121,8 @@ export async function GET(request: Request) {
           id: req.id,
           score,
           distance: parseFloat(distance.toFixed(1)),
+          destDistance: parseFloat(destDistance.toFixed(1)),
+          sameDestination,
           price,
           user: {
             id: req.user.id,
@@ -129,6 +141,10 @@ export async function GET(request: Request) {
           request: {
             pickupAddress: req.pickupAddress,
             destAddress: req.destAddress,
+            pickupLat: req.pickupLat,
+            pickupLng: req.pickupLng,
+            destLat: req.destLat,
+            destLng: req.destLng,
             departureTime: req.departureTime,
             flexibilityWindow: req.flexibilityWindow,
             frequency: req.frequency,
@@ -136,7 +152,7 @@ export async function GET(request: Request) {
           },
         };
       })
-      .filter((match) => match.score > 0) // Filter hard mismatches
+      .filter((match) => match.score >= 60) // Only surface real matches (60%+)
       .sort((a, b) => b.score - a.score) // Sort by score descending
       .slice(0, 3); // Top 3 matches
 

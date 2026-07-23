@@ -11,7 +11,13 @@ interface RideTicket {
   destAddress: string;
   departureTime: string;
   womenOnly: boolean;
+  hasDriver: boolean;
   vehicleInfo: string | null;
+  tripDriverName: string | null;
+  tripVehicleNumber: string | null;
+  cancelledById: string | null;
+  driverAcceptedAt: string | null;
+  passengerAcceptedAt: string | null;
   sharePerRider: number | null;
   riderCount: number;
   driver: { id: string; name: string; avatarText: string };
@@ -41,29 +47,42 @@ function ConfirmationContent() {
   const legacyRiders = parseInt(searchParams.get('riders') || '3', 10);
 
   const [ride, setRide] = useState<RideTicket | null>(null);
+  const [myId, setMyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(rideId));
   const [error, setError] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+  const [tripDriverName, setTripDriverName] = useState('');
+  const [tripVehicleNumber, setTripVehicleNumber] = useState('');
+  const [savingTrip, setSavingTrip] = useState(false);
+
+  const loadRide = async () => {
+    if (!rideId) return;
+    try {
+      const res = await fetch(`/api/rides/${rideId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load ride');
+      setRide(data.ride);
+      setTripDriverName(data.ride.tripDriverName || '');
+      setTripVehicleNumber(data.ride.tripVehicleNumber || '');
+    } catch (err: any) {
+      setError(err.message || 'Could not load confirmation');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!rideId) return;
-    let cancelled = false;
-
     (async () => {
       try {
-        const res = await fetch(`/api/rides/${rideId}`);
+        const res = await fetch('/api/auth');
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load ride');
-        if (!cancelled) setRide(data.ride);
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || 'Could not load confirmation');
-      } finally {
-        if (!cancelled) setLoading(false);
+        setMyId(data.user?.id || null);
+      } catch {
+        setMyId(null);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    loadRide();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId]);
 
   if (loading) {
@@ -91,6 +110,7 @@ function ConfirmationContent() {
     ? `${ride.pickupAddress} → ${ride.destAddress}`
     : 'Sector 17 Hostel → Tech Park, Gate 3';
   const pickupTime = ride ? formatPickupTime(ride.departureTime) : '8:10 AM, tomorrow';
+  const hasDriver = ride ? ride.hasDriver : true;
   const vehicle = ride?.vehicleInfo || 'Hyundai i20 · KA-05-JT-2291';
   const womenOnly = ride?.womenOnly ?? true;
 
@@ -99,7 +119,6 @@ function ConfirmationContent() {
     const others = ride.participants
       .filter((p) => p.user.name !== driverName)
       .map((p) => p.user.name);
-    // Prefer "You" for current viewer when name is Aisha (demo default)
     const labeled = others.map((n) => (n.includes('Aisha') ? 'You' : n));
     ridersList = labeled.length ? labeled.join(', ') : 'You';
   } else {
@@ -126,33 +145,117 @@ function ConfirmationContent() {
     firstNames.push('Divya', 'you');
   }
 
-
-
   const isConfirmed = ride?.status === 'confirmed';
   const isWaitingPassenger = ride?.status === 'waiting_for_passenger';
   const isWaitingDriver = ride?.status === 'waiting_for_driver';
   const isPending = isWaitingPassenger || isWaitingDriver;
+  const isCancelled = ride?.status === 'cancelled';
 
-  const statusTitle = isConfirmed
-    ? 'Ride confirmed'
-    : isWaitingPassenger
-      ? 'Waiting for Passenger Confirmation'
-      : isWaitingDriver
-        ? 'Waiting for Driver Confirmation'
-        : 'Ride Requested';
+  // Who am I in this ride, and has the OTHER person already accepted / declined?
+  const isMeDriver = Boolean(ride && myId && ride.driver.id === myId);
+  const myAccepted = ride
+    ? isMeDriver
+      ? Boolean(ride.driverAcceptedAt)
+      : Boolean(ride.passengerAcceptedAt)
+    : false;
 
-  const blurb = isConfirmed
-    ? (firstNames.length >= 3
-        ? `${firstNames[0]}, ${firstNames[1]} and ${firstNames[2]} are locked in for tomorrow's commute.`
-        : `${firstNames[0]} and you are locked in for tomorrow's commute.`)
-    : isPending
-      ? 'Ride request sent! Messaging remains available while waiting for mutual acceptance. Either party may cancel before final confirmation.'
-      : 'Your ride request is pending confirmation.';
+  // Resolve a display name for whoever cancelled, so the other person sees who.
+  let cancelledByName = '';
+  if (ride?.cancelledById) {
+    if (ride.cancelledById === ride.driver.id) {
+      cancelledByName = ride.driver.name;
+    } else {
+      const p = ride.participants.find((p) => p.user.id === ride.cancelledById);
+      cancelledByName = p?.user.name || 'the other partner';
+    }
+  }
+
+  const statusTitle = isCancelled
+    ? 'Ride sharing cancelled'
+    : isConfirmed
+      ? 'Ride confirmed'
+      : isWaitingPassenger
+        ? 'Waiting for Passenger Confirmation'
+        : isWaitingDriver
+          ? 'Waiting for Driver Confirmation'
+          : 'Ride Requested';
+
+  const blurb = isCancelled
+    ? `Ride sharing cancelled by ${cancelledByName || 'the other partner'}.`
+    : isConfirmed
+      ? (firstNames.length >= 3
+          ? `${firstNames[0]}, ${firstNames[1]} and ${firstNames[2]} are locked in for tomorrow's commute.`
+          : `${firstNames[0]} and you are locked in for tomorrow's commute.`)
+      : isPending
+        ? (myAccepted
+            ? 'You\u2019ve confirmed. Waiting for the other partner to confirm too. Either party may still cancel before it\u2019s final.'
+            : 'Your match sent a ride request. Confirm below to lock it in, or decline if it doesn\u2019t work for you.')
+        : 'Your ride request is pending confirmation.';
+
+  const handleConfirm = async () => {
+    if (!rideId) return;
+    setActionBusy(true);
+    try {
+      await fetch(`/api/rides/${rideId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'confirm' }),
+      });
+      await loadRide();
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!rideId) return;
+    if (!confirm('Are you sure you want to cancel this ride request?')) return;
+    setActionBusy(true);
+    try {
+      await fetch(`/api/rides/${rideId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_status', status: 'cancelled' }),
+      });
+      await loadRide();
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleSaveTripDetails = async () => {
+    if (!rideId) return;
+    setSavingTrip(true);
+    try {
+      const res = await fetch(`/api/rides/${rideId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_trip_details',
+          tripDriverName,
+          tripVehicleNumber,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) setRide(data.ride);
+    } finally {
+      setSavingTrip(false);
+    }
+  };
 
   return (
     <div className="confirm-wrap">
-      <div className="check-circle" style={isPending ? { backgroundColor: '#fff3dd', color: 'var(--amber-ink)' } : {}}>
-        {isConfirmed ? '✓' : '⏳'}
+      <div
+        className="check-circle"
+        style={
+          isCancelled
+            ? { backgroundColor: '#fde2e2', color: 'var(--coral)' }
+            : isPending
+              ? { backgroundColor: '#fff3dd', color: 'var(--amber-ink)' }
+              : {}
+        }
+      >
+        {isCancelled ? '✕' : isConfirmed ? '✓' : '⏳'}
       </div>
       <h2 style={{ margin: '0 0 8px', fontSize: '24px' }}>
         {statusTitle}
@@ -169,9 +272,9 @@ function ConfirmationContent() {
           <b>{pickupTime}</b>
         </div>
         <div className="ticket-row">
-          <span>Driver</span>
+          <span>{hasDriver ? 'Driver' : 'Ride partner'}</span>
           <b>
-            {driverName} · {vehicle}
+            {hasDriver ? `${driverName} · ${vehicle}` : driverName}
           </b>
         </div>
         <div className="ticket-row">
@@ -190,28 +293,74 @@ function ConfirmationContent() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+      {ride && !isCancelled && (
+        <div className="card" style={{ padding: '20px', marginTop: '14px', textAlign: 'left' }}>
+          <div style={{ fontWeight: 700, marginBottom: '4px' }}>Actual trip details</div>
+          <p style={{ color: 'var(--ink-soft)', fontSize: '13px', margin: '0 0 14px' }}>
+            Once you've booked your own ride (Yango, Careem, or your own car), share the
+            real driver's name and car number here so you both know who to look for.
+          </p>
+          <div className="field">
+            <label>Driver name</label>
+            <input
+              type="text"
+              placeholder="e.g. Ahmed Khan"
+              value={tripDriverName}
+              onChange={(e) => setTripDriverName(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label>Car number</label>
+            <input
+              type="text"
+              placeholder="e.g. ICT-4521"
+              value={tripVehicleNumber}
+              onChange={(e) => setTripVehicleNumber(e.target.value)}
+            />
+          </div>
+          <button
+            onClick={handleSaveTripDetails}
+            className="btn btn-outline text-ink cursor-pointer"
+            type="button"
+            disabled={savingTrip}
+          >
+            {savingTrip ? 'Saving…' : 'Save trip details'}
+          </button>
+          {(ride.tripDriverName || ride.tripVehicleNumber) && (
+            <p style={{ fontSize: '13px', color: 'var(--ink-soft)', marginTop: '10px' }}>
+              Currently shared: <b>{ride.tripDriverName || '—'}</b> · <b>{ride.tripVehicleNumber || '—'}</b>
+            </p>
+          )}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '16px' }}>
         <Link href="/chat" className="btn btn-outline text-ink no-underline cursor-pointer">
           💬 Chat with ride match
         </Link>
-        {rideId && ride?.status !== 'cancelled' && ride?.status !== 'completed' && (
+
+        {rideId && isPending && !myAccepted && (
           <button
-            onClick={async () => {
-              if (confirm('Are you sure you want to cancel this ride request?')) {
-                await fetch(`/api/rides/${rideId}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'set_status', status: 'cancelled' }),
-                });
-                window.location.reload();
-              }
-            }}
-            className="btn btn-coral text-white cursor-pointer"
+            onClick={handleConfirm}
+            className="btn btn-amber text-navy-950 cursor-pointer"
             type="button"
+            disabled={actionBusy}
           >
-            Cancel ride
+            {actionBusy ? 'Confirming…' : '✓ Confirm ride'}
           </button>
         )}
+
+        {rideId && !isCancelled && ride?.status !== 'completed' && (
+          <button
+            onClick={handleCancel}
+            className="btn btn-coral text-white cursor-pointer"
+            type="button"
+            disabled={actionBusy}
+          >
+            {isPending ? 'Decline ride' : 'Cancel ride'}
+          </button>
+        )}
+
         <Link href="/dashboard" className="btn btn-amber text-navy-950 no-underline cursor-pointer">
           Go to my dashboard →
         </Link>

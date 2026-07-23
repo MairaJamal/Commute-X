@@ -122,8 +122,12 @@ model Ride {
   pickupAddress  String
   destAddress    String
   departureTime  String
-  womenOnly      Boolean  @default(false)
-  vehicleInfo    String?
+ womenOnly      Boolean  @default(false)
+hasDriver      Boolean  @default(false)
+vehicleInfo    String?
+tripDriverName      String?
+tripVehicleNumber   String?
+cancelledById String?
 
   // Fare agreement — required before status can become "confirmed"
   distanceKm         Float?

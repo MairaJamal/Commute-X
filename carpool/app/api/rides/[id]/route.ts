@@ -69,6 +69,7 @@ export async function GET(_request: Request, context: RouteContext) {
  * PATCH actions:
  * - agree_fare: persist fare split + set fareAgreedAt
  * - set_status: transition status (confirmed requires fareAgreedAt)
+ * - update_trip_details: save manually-entered real driver name/car number
  * - confirm: agree fare + move to confirmed in one step
  */
 export async function PATCH(request: Request, context: RouteContext) {
@@ -91,7 +92,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       return agreeFare(id, userId, body);
     }
     if (action === 'set_status') {
-      return setStatus(id, body.status);
+      return setStatus(id, body.status, userId);
+    }
+    if (action === 'update_trip_details') {
+      return updateTripDetails(id, body);
     }
     if (action === 'confirm' || action === 'accept') {
       // 1. Ensure fare is agreed if fare details provided
@@ -142,7 +146,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     return NextResponse.json(
-      { error: 'Unknown action. Use agree_fare, set_status, or confirm.' },
+      { error: 'Unknown action. Use agree_fare, set_status, update_trip_details, or confirm.' },
       { status: 400 }
     );
   } catch (e: any) {
@@ -247,7 +251,28 @@ async function agreeFare(
   return NextResponse.json({ success: true, ride: updated });
 }
 
-async function setStatus(rideId: string, nextStatusRaw: string) {
+async function updateTripDetails(
+  rideId: string,
+  body: { tripDriverName?: string; tripVehicleNumber?: string }
+) {
+  const ride = await db.ride.findUnique({ where: { id: rideId } });
+  if (!ride) {
+    return NextResponse.json({ error: 'Ride not found' }, { status: 404 });
+  }
+
+  const updated = await db.ride.update({
+    where: { id: rideId },
+    data: {
+      tripDriverName: body.tripDriverName?.trim() || null,
+      tripVehicleNumber: body.tripVehicleNumber?.trim() || null,
+    },
+    include: rideInclude,
+  });
+
+  return NextResponse.json({ success: true, ride: updated });
+}
+
+async function setStatus(rideId: string, nextStatusRaw: string, userId: string) {
   if (!isRideStatus(nextStatusRaw)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
@@ -285,6 +310,7 @@ async function setStatus(rideId: string, nextStatusRaw: string) {
     where: { id: rideId },
     data: {
       status: nextStatus,
+      cancelledById: nextStatus === 'cancelled' ? userId : ride.cancelledById,
       ...timestamps,
     },
     include: rideInclude,

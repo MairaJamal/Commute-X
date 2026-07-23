@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { splitFare, FARE_RATE_PER_KM } from '@/lib/splitFare';
 
 const TOLLS = 20;
 const SERVICE_FEE_PER_RIDER = 6;
-
-const EXTRA_RIDER_LABELS = ['Divya Rao', 'Sara Fernandes'];
 
 function FareSplitContent() {
   const searchParams = useSearchParams();
@@ -23,6 +21,23 @@ function FareSplitContent() {
   const [customFare, setCustomFare] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Names for any riders beyond the driver + "You". The app only tracks
+  // one matched peer per ride, so there's no real record for a 3rd/4th
+  // rider — the person confirming the ride types who's actually sharing it.
+  const [extraNames, setExtraNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    const extraCount = Math.max(0, riders - 2);
+    setExtraNames((prev) => {
+      const next = [...prev];
+      next.length = extraCount;
+      for (let i = 0; i < extraCount; i++) {
+        if (!next[i]) next[i] = '';
+      }
+      return next;
+    });
+  }, [riders]);
 
   const adjFare = (type: 'dist' | 'riders', dir: number) => {
     if (type === 'dist') {
@@ -44,10 +59,11 @@ function FareSplitContent() {
   const displayShare = Math.round(displayTotal / Math.max(1, riders));
 
   const riderRows = [
-    { label: `${driverName} (driver)`, share: displayShare },
-    { label: 'You', share: displayShare },
-    ...EXTRA_RIDER_LABELS.slice(0, Math.max(0, riders - 2)).map((label) => ({
-      label,
+    { key: 'driver', label: driverName, share: displayShare },
+    { key: 'you', label: 'You', share: displayShare },
+    ...extraNames.map((name, i) => ({
+      key: `extra-${i}`,
+      label: name || `Rider ${i + 3}`,
       share: displayShare,
     })),
   ];
@@ -72,7 +88,7 @@ function FareSplitContent() {
     setError('');
     try {
       const id = await ensureRide();
-      const extraRiderNames = EXTRA_RIDER_LABELS.slice(0, Math.max(0, riders - 2));
+      const extraRiderNames = extraNames.map((name, i) => name.trim() || `Rider ${i + 3}`);
 
       // Agree fare + confirm in one server action
       const res = await fetch(`/api/rides/${id}`, {
@@ -159,6 +175,27 @@ function FareSplitContent() {
               </button>
             </div>
           </div>
+
+          {extraNames.length > 0 && (
+            <div className="fare-input-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+              <span>Name the extra rider(s) sharing this trip</span>
+              {extraNames.map((name, i) => (
+                <input
+                  key={i}
+                  type="text"
+                  placeholder={`Rider ${i + 3} name`}
+                  value={name}
+                  onChange={(e) => {
+                    const next = [...extraNames];
+                    next[i] = e.target.value;
+                    setExtraNames(next);
+                  }}
+                  style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid var(--line)' }}
+                />
+              ))}
+            </div>
+          )}
+
           <div className="fare-input-row">
             <span>Tolls / parking (split evenly)</span>
             <span className="mono">PKR {TOLLS}</span>
@@ -176,7 +213,7 @@ function FareSplitContent() {
           </div>
 
           {riderRows.map((row) => (
-            <div className="split-row" key={row.label}>
+            <div className="split-row" key={row.key}>
               <span>{row.label}</span>
               <span className="mono">PKR {row.share}</span>
             </div>

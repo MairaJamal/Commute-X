@@ -86,10 +86,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, ride: existing, reused: true });
     }
 
-    const peerDrives = peer.userPreferences?.willingToDrive ?? false;
-    const iDrive = me.userPreferences?.willingToDrive ?? false;
-    const driverId = peerDrives ? peer.id : iDrive ? me.id : peer.id;
-    const driver = driverId === peer.id ? peer : me;
+  const peerDrives = peer.userPreferences?.willingToDrive ?? false;
+const iDrive = me.userPreferences?.willingToDrive ?? false;
+// hasDriver is true only when someone actually offered their own car.
+// This app just matches people to coordinate a shared ride (own car, Yango,
+// Careem, etc. happens outside the app) — so we never force a "driver" label
+// onto someone who never volunteered to drive.
+const hasDriver = peerDrives || iDrive;
+const driverId = peerDrives ? peer.id : iDrive ? me.id : peer.id;
+const driver = driverId === peer.id ? peer : me;
 
     const ride = await db.ride.create({
       data: {
@@ -100,7 +105,8 @@ export async function POST(request: Request) {
         destAddress: commuteRequest.destAddress,
         departureTime: commuteRequest.departureTime,
         womenOnly: commuteRequest.womenOnly,
-        vehicleInfo: vehicleForDriver(driver.name),
+        hasDriver,
+        vehicleInfo: hasDriver ? vehicleForDriver(driver.name) : null,
         participants: {
           create: [
             {

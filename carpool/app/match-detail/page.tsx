@@ -27,6 +27,10 @@ function MatchDetailContent() {
   const willingToDrive = searchParams.get('drive') || 'Yes';
   const peerId = searchParams.get('peerId') || '';
   const requestId = searchParams.get('requestId') || '';
+  const pickupLat = parseFloat(searchParams.get('pickupLat') || '11.25');
+const pickupLng = parseFloat(searchParams.get('pickupLng') || '75.78');
+const destLat = parseFloat(searchParams.get('destLat') || '11.35');
+const destLng = parseFloat(searchParams.get('destLng') || '75.88'); 
 
   const handleMessage = () => {
     const params = new URLSearchParams({
@@ -82,14 +86,14 @@ function MatchDetailContent() {
       <div className="card my-4 p-4">
         <h3 className="font-bold text-sm text-navy-950 mb-3">📍 Route &amp; Pickup Map</h3>
         <LocationMap
-          pickupLat={11.25}
-          pickupLng={75.78}
-          destLat={11.35}
-          destLng={75.88}
-          pickupAddress="Pickup Location"
-          destAddress="Destination"
-          height="240px"
-        />
+  pickupLat={pickupLat}
+  pickupLng={pickupLng}
+  destLat={destLat}
+  destLng={destLng}
+  pickupAddress="Pickup Location"
+  destAddress="Destination"
+  height="240px"
+/>
       </div>
 
       <div className="info-grid">
