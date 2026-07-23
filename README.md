@@ -30,7 +30,7 @@ npm install
 npm run dev
 
 ---
-##📱 Usage
+###📱 Usage
 Sign up / Log in
 
 Set your route (departure time, pickup, destination)
