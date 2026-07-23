@@ -4,7 +4,6 @@
 A smart carpool matching platform that connects commuters with similar routes and lets them share rides using their preferred ride‑hailing service (Uber, Careem, InDrive, Yango, etc.).  
 Our mission: make commuting cheaper, smarter, and more sustainable.
 
-🌐 **Live Demo:** [https://commute-x-d2wm.vercel.app](https://commute-x-d2wm.vercel.app)
 
 ---
 
