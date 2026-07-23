@@ -2,7 +2,7 @@
 
 **Smart Carpooling Platform for Daily Commuters**
 
-Commute‑X helps commuters share rides more easily by matching users with similar routes and departure times. It complements existing ride‑hailing services (Uber, Careem, InDrive, Yango) while making commuting cheaper, reducing traffic congestion, and lowering carbon emissions.
+Commute‑X is a collaborative carpooling solution designed to make daily commuting cheaper, greener, and more social. Unlike traditional ride‑hailing services, Commute‑X connects people already traveling in the same direction, helping them share rides seamlessly while complementing existing platforms like Uber, Careem, InDrive, and Yango.
 
 ---
 
@@ -13,6 +13,31 @@ Commute‑X helps commuters share rides more easily by matching users with simil
 - **Fair Fare Splits** – Transparent cost sharing among riders  
 - **Ride‑Hailing Integration** – Book rides via Uber, Careem, InDrive, or Yango  
 - **Eco‑Friendly Impact** – Less traffic, fewer emissions  
+
+---
+
+## 📱 Usage
+Sign up / Log in
+
+Set your route (departure time, pickup, destination)
+
+Get matched with commuters nearby
+
+Coordinate via chat
+
+Book with your preferred app
+
+---
+
+
+## 🌍 Benefits
+- Cost Savings for commuters
+
+- Reduced Congestion in cities
+
+- Lower Emissions for sustainability
+
+- Community Building through shared rides
 
 ---
 
@@ -29,14 +54,15 @@ cd commute-x
 npm install
 npm run dev
 
----
-###📱 Usage
-Sign up / Log in
 
-Set your route (departure time, pickup, destination)
+🛠️ Tech Stack
+Frontend: React Native
 
-Get matched with commuters nearby
+Backend: Node.js + Express
 
-Coordinate via chat
+Database: MongoDB
 
-Book with your preferred app
+Authentication: JWT
+
+APIs: Uber, Careem, InDrive, Yango
+
